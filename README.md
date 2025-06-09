@@ -1,95 +1,138 @@
-Social Media Pipeline
-A real-time data pipeline for processing social media posts using Apache Spark, Kafka, and Java. This project fetches tweets (or mock data) from Twitter, streams them through Kafka, and processes them with Spark to extract hashtag counts and display recent tweets.
-Project Overview
+# Social Media Pipeline
 
-Purpose: Stream and analyze social media posts to identify trending hashtags and recent activity.
-Technologies: Apache Spark, Apache Kafka, Java, Twitter API (or mock data).
-Future Plans: Add Docker for containerization and Python for additional data processing or visualization.
+A real-time data pipeline that processes social media posts using **Apache Spark**, **Apache Kafka**, and **Java**. Tweets (or mock data) are streamed through Kafka and processed by Spark to extract **hashtag counts** and display **recent tweets**.
 
-Project Structure
+---
+
+## Project Overview
+
+* **Goal**: Stream and analyze tweets to identify trending hashtags and recent activity.
+* **Stack**: Apache Kafka, Apache Spark, Java, Twitter API *(optional)*.
+* **In Progress**:
+
+    *  Docker containerization.
+    *  Python integration for analytics/visualization.
+
+---
+
+## Project Structure
+
+```
 social-media-pipeline/
 ├── src/
 │   ├── main/
 │   │   ├── java/
-│   │   │   ├── org/
-│   │   │   │   ├── example/
-│   │   │   │   │   ├── SparkStreamingConsumer.java
-│   │   │   │   │   ├── KafkaProducerUtil.java
-│   │   │   │   │   ├── Config.java
-│   │   │   │   │   ├── TwitterStreamProducer.java
-│   ├── python/
-│   │   └── (future Python scripts)
-├── docker/
-│   └── (future Docker configurations)
-├── pom.xml
-├── README.md
-└── .gitignore
+│   │   │   └── org/example/
+│   │   │       ├── SparkStreamingConsumer.java
+│   │   │       ├── KafkaProducerUtil.java
+│   │   │       ├── Config.java
+│   │   │       └── TwitterStreamProducer.java
+│   └── python/                 # Future Python scripts
+├── docker/                    # Future Docker configs
+├── pom.xml                    # Maven config
+├── .gitignore
+└── README.md
+```
 
-Prerequisites
+---
 
-Java: JDK 8 or higher
-Maven: For building the project
-Apache Kafka: Version compatible with kafka-clients 3.6.1
-Apache Spark: Version 3.5.1
-ZooKeeper: Required for Kafka
-Twitter API Bearer Token: Optional, for fetching real tweets (mock data used by default)
-Operating System: Instructions below are for Windows; adjust for Linux/Mac if needed
+##  Prerequisites
 
-Setup Instructions
+| Tool              | Version / Notes                                 |
+| ----------------- | ----------------------------------------------- |
+| Java              | JDK 8+                                          |
+| Maven             | For building the project                        |
+| Apache Kafka      | Compatible with `kafka-clients` 3.6.1           |
+| Apache Spark      | Version 3.5.1                                   |
+| ZooKeeper         | Required for Kafka                              |
+| Twitter API Token | Optional — for fetching real tweets             |
+| OS                | Setup written for Windows (adapt for Linux/Mac) |
 
-Clone the Repository:
+---
+
+## Setup Instructions
+
+### 1. Clone the Repository
+
+```bash
 git clone https://github.com/<your-username>/social-media-pipeline.git
 cd social-media-pipeline
+```
 
+### 2. Build the Project
 
-Install Dependencies:Build the project using Maven:
+```bash
 mvn clean install
+```
 
+### 3. Start ZooKeeper (Windows)
 
-Start ZooKeeper:Ensure ZooKeeper is running before starting Kafka:
+```bash
 bin\windows\zookeeper-server-start.bat config\zookeeper.properties
+```
 
+### 4. Start Kafka Broker
 
-Start Kafka Server:Start the Kafka broker:
+```bash
 bin\windows\kafka-server-start.bat config\server.properties
+```
 
-Ensure the Kafka topic social-media-posts is created (configured in Config.java).
+⚠️ **Make sure the `social-media-posts` topic exists.** It's configured in `Config.java`.
 
-Run the Twitter Producer:The producer fetches tweets (or sends mock data) to Kafka. Set the Twitter Bearer Token environment variable if using real Twitter data:
+### 5. Run the Kafka Producer
+
+**Option A: Use Mock Data (default)**
+No setup needed — mock tweets will be sent to Kafka.
+
+**Option B: Use Real Twitter Data**
+
+```bash
 set TWITTER_BEARER_TOKEN="your_token"
+```
+
+Edit `USE_MOCK_DATA = false` in `TwitterStreamProducer.java`, then run:
+
+```bash
 mvn exec:java "-Dexec.mainClass=org.example.TwitterStreamProducer"
+```
 
-Note: The project uses mock data by default (USE_MOCK_DATA = true in TwitterStreamProducer.java). To use real Twitter data, set USE_MOCK_DATA = false and ensure a valid TWITTER_BEARER_TOKEN.
+### 6. Run the Spark Streaming Consumer
 
-Run the Spark Consumer:The consumer processes tweets from Kafka, extracts hashtags, and displays results:
+```bash
 mvn exec:java "-Dexec.mainClass=org.example.SparkStreamingConsumer" -X
+```
 
+---
 
+## Usage
 
-Usage
+*  **Hashtag Counts**: Displays the number of times hashtags appeared per batch.
+*  **Recent Tweets**: Shows up to 5 recent tweets from the last hour.
+*  **Logging**: Logs invalid JSON, API rate limits, and debug info.
+*  **Mock Mode**: Simulates tweets using static data for testing.
 
-Output: The Spark consumer prints:
-Hashtag counts per batch (e.g., #tech: 5).
-Up to 5 recent tweets (within the last hour) with their timestamps.
+---
 
+## Planned Improvements
 
-Logging: Logs are generated for debugging (e.g., invalid JSON, rate limit status).
-Mock Data: If USE_MOCK_DATA = true, the producer sends predefined mock tweets for testing.
+*  **Dockerization**: Add Docker support for Kafka, Spark, and app containers.
+*  **Python Analytics**: Integrate with `pandas`, `matplotlib`, or `Plotly`.
+*  **Monitoring**: Prometheus + Grafana for pipeline metrics.
+*  **Storage**: Persist tweets or hashtags in PostgreSQL or another DB.
 
-Future Improvements
+---
 
-Docker: Containerize Kafka, Spark, and the application using Docker and Docker Compose.
-Python: Add Python scripts for advanced analytics (e.g., visualization with pandas and matplotlib) or alternative data processing.
-Monitoring: Integrate Prometheus or Grafana for pipeline monitoring.
-Database: Store hashtag counts or tweets in a database (e.g., PostgreSQL).
+##  Troubleshooting
 
-Troubleshooting
+| Issue                | Solution                                                        |
+| -------------------- | --------------------------------------------------------------- |
+| Kafka not connecting | Ensure ZooKeeper and Kafka are running on `localhost:9092`.     |
+| Twitter API failure  | Check token or toggle back to mock mode.                        |
+| Spark crashes        | Ensure Spark version is 3.5.1 and `local[*]` mode is supported. |
+| Debugging            | Check SLF4J/Logback logs for detailed error output.             |
 
-Kafka Connection Issues: Ensure ZooKeeper and Kafka are running and localhost:9092 is accessible.
-Twitter API Errors: Verify TWITTER_BEARER_TOKEN is valid or use mock data.
-Spark Errors: Check Spark version compatibility and ensure local[*] mode is supported.
-Logs: Review logs for detailed error messages (SLF4J with Logback).
+---
 
-Contributing
-Contributions are welcome! Please submit a pull request or open an issue for suggestions.
+## Contributing
 
+Pull requests are welcome! Feel free to open an issue for suggestions, bugs, or feature requests.
