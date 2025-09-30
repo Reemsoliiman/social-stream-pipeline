@@ -55,7 +55,7 @@ social-media-pipeline/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/social-media-pipeline.git
+git clone https://github.com/Reemsoliiman/social-media-pipeline.git
 cd social-media-pipeline
 ```
 
