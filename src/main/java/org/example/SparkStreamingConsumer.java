@@ -17,6 +17,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -33,22 +37,19 @@ public class SparkStreamingConsumer {
 
     public static void main(String[] args) throws InterruptedException {
         SparkConf conf = new SparkConf()
-                .setAppName("SocialMediaPipeline")
+                .setAppName(Config.SPARK_APP_NAME)
                 .setMaster("local[*]");
         JavaStreamingContext streamingContext = new JavaStreamingContext(conf, Durations.seconds(10));
 
-        // Use a unique consumer group ID for each run to force fresh offset
-        String consumerGroupId = "spark-consumer-group-" + System.currentTimeMillis();
-
         Map<String, Object> kafkaParams = new HashMap<>();
-        kafkaParams.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        kafkaParams.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, Config.KAFKA_BOOTSTRAP_SERVERS);
         kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroupId);
+        kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, Config.KAFKA_GROUP_ID);
         kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
 
-        Collection<String> topics = Collections.singletonList("social-media-posts");
+        Collection<String> topics = Collections.singletonList(Config.KAFKA_TOPIC);
 
         JavaDStream<ConsumerRecord<String, String>> stream = KafkaUtils.createDirectStream(
                 streamingContext,
@@ -58,7 +59,6 @@ public class SparkStreamingConsumer {
 
         JavaDStream<String> tweetStream = stream.map(ConsumerRecord::value).filter(tweet -> {
             try {
-                // Clean the string to handle special characters
                 String cleanedTweet = tweet.replaceAll("[^\\x00-\\x7F]", " ");
                 new JSONObject(cleanedTweet);
                 return true;
@@ -68,10 +68,33 @@ public class SparkStreamingConsumer {
             }
         });
 
-        // Add debug log to trace number of tweets processed
         tweetStream.foreachRDD((rdd, time) -> {
             long count = rdd.count();
             logger.info("Processing {} tweets in batch at time {}", count, FORMATTER.format(Instant.ofEpochMilli(time.milliseconds())));
+            
+            rdd.foreach(tweet -> {
+                try {
+                    String cleanedTweet = tweet.replaceAll("[^\\x00-\\x7F]", " ");
+                    JSONObject json = new JSONObject(cleanedTweet);
+                    
+                    String tweetText = json.getString("tweet");
+                    String timestamp = json.getString("timestamp");
+                    int length = json.getInt("length");
+                    
+                    List<String> hashtags = new ArrayList<>();
+                    if (json.has("hashtags")) {
+                        JSONArray hashtagArray = json.getJSONArray("hashtags");
+                        for (int i = 0; i < hashtagArray.length(); i++) {
+                            JSONObject hashtagObj = hashtagArray.getJSONObject(i);
+                            hashtags.add(hashtagObj.getString("tag"));
+                        }
+                    }
+                    
+                    storeTweetInDatabase(tweetText, timestamp, length, hashtags);
+                } catch (Exception e) {
+                    logger.error("Error processing tweet: {}", e.getMessage());
+                }
+            });
         });
 
         JavaPairDStream<String, Integer> hashtagCounts = tweetStream.flatMap(tweet -> {
@@ -110,7 +133,10 @@ public class SparkStreamingConsumer {
                 System.out.println("┌─────────────────┬───────┐");
                 System.out.println("│ Hashtag         │ Count │");
                 System.out.println("├─────────────────┼───────┤");
-                rdd.collect().forEach(tuple -> System.out.printf("│ %-15s │ %5d │%n", tuple._1, tuple._2));
+                rdd.collect().forEach(tuple -> {
+                    System.out.printf("│ %-15s │ %5d │%n", tuple._1, tuple._2);
+                    storeHashtagCount(tuple._1, tuple._2, timestamp);
+                });
                 System.out.println("└─────────────────┴───────┘");
             } else {
                 System.out.println("\n=== No Data in Batch ===");
@@ -152,5 +178,44 @@ public class SparkStreamingConsumer {
 
         streamingContext.start();
         streamingContext.awaitTermination();
+    }
+
+    private static void storeTweetInDatabase(String tweetText, String timestamp, int length, List<String> hashtags) {
+        String url = String.format("jdbc:postgresql://%s:%s/%s", 
+            Config.POSTGRES_HOST, Config.POSTGRES_PORT, Config.POSTGRES_DB);
+        
+        String sql = "INSERT INTO tweets (tweet_text, timestamp, length, hashtags, processed) VALUES (?, ?, ?, ?, false)";
+        
+        try (Connection conn = DriverManager.getConnection(url, Config.POSTGRES_USER, Config.POSTGRES_PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, tweetText);
+            pstmt.setTimestamp(2, Timestamp.from(Instant.parse(timestamp)));
+            pstmt.setInt(3, length);
+            pstmt.setArray(4, conn.createArrayOf("VARCHAR", hashtags.toArray()));
+            pstmt.executeUpdate();
+            
+        } catch (Exception e) {
+            logger.error("Error storing tweet in database: {}", e.getMessage());
+        }
+    }
+
+    private static void storeHashtagCount(String hashtag, int count, String timestamp) {
+        String url = String.format("jdbc:postgresql://%s:%s/%s", 
+            Config.POSTGRES_HOST, Config.POSTGRES_PORT, Config.POSTGRES_DB);
+        
+        String sql = "INSERT INTO hashtag_counts (hashtag, count, timestamp) VALUES (?, ?, ?)";
+        
+        try (Connection conn = DriverManager.getConnection(url, Config.POSTGRES_USER, Config.POSTGRES_PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, hashtag);
+            pstmt.setInt(2, count);
+            pstmt.setTimestamp(3, Timestamp.valueOf(timestamp));
+            pstmt.executeUpdate();
+            
+        } catch (Exception e) {
+            logger.error("Error storing hashtag count: {}", e.getMessage());
+        }
     }
 }

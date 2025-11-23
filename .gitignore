@@ -44,3 +44,33 @@ build/
 # Maven
 target/
 *.log
+
+# Rate Limit State
+rate_limit.properties
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Database
+*.db
+*.sqlite3
+
+# Environment
+.env
+.env.local

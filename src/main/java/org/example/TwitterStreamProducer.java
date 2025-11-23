@@ -24,19 +24,19 @@ public class TwitterStreamProducer {
     private static int requestCount = 0;
     private static long lastResetTimestamp = 0;
     private static final String RATE_LIMIT_FILE = "rate_limit.properties";
-    private static final boolean USE_MOCK_DATA = true;
 
     public static void main(String[] args) {
-        if (Config.TWITTER_BEARER_TOKEN == null && !USE_MOCK_DATA) {
+        if (Config.TWITTER_BEARER_TOKEN == null && !Config.USE_MOCK_DATA) {
             logger.error("TWITTER_BEARER_TOKEN environment variable is not set");
             System.exit(1);
         }
 
+        logger.info("Starting producer in {} mode", Config.USE_MOCK_DATA ? "MOCK" : "LIVE");
         loadRateLimitState();
 
         while (true) {
             try {
-                if (USE_MOCK_DATA) {
+                if (Config.USE_MOCK_DATA) {
                     sendMockTweets();
                 } else {
                     fetchAndSendTweets();
